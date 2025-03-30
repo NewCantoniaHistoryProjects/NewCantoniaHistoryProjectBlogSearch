@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medium Posts Search</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #searchBar {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        .result {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .result h2 {
+            margin: 0 0 10px 0;
+        }
+        .result a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+        .result a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>Search My Medium Posts</h1>
+    <input type="text" id="searchBar" placeholder="Search posts (use quotes for exact match)">
+    <div id="results"></div>
+
+    <!-- Load the generated posts data -->
+    <script src="posts_data.js"></script>
+    
+    <script>
+        // Use the postsData from posts_data.js
+        const posts = postsData.map(post => ({
+            title: post.title,
+            file: post.file,
+            content: post.content.toLowerCase()
+        }));
+
+        // Search function
+        function searchPosts(query) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            if (!query.trim()) return;
+
+            // Parse query into terms (split by spaces, handle quotes)
+            const terms = [];
+            let currentTerm = '';
+            let inQuotes = false;
+            
+            for (const char of query) {
+                if (char === '"' && !inQuotes) {
+                    inQuotes = true;
+                } else if (char === '"' && inQuotes) {
+                    inQuotes = false;
+                    if (currentTerm) {
+                        terms.push({ text: currentTerm, exact: true });
+                        currentTerm = '';
+                    }
+                } else if (char === ' ' && !inQuotes) {
+                    if (currentTerm) {
+                        terms.push({ text: currentTerm, exact: false });
+                        currentTerm = '';
+                    }
+                } else {
+                    currentTerm += char;
+                }
+            }
+            if (currentTerm) {
+                terms.push({ text: currentTerm, exact: inQuotes });
+            }
+
+            // Filter posts
+            const filteredPosts = posts.filter(post => {
+                return terms.every(term => {
+                    if (term.exact) {
+                        // Exact match
+                        return post.content.includes(term.text.toLowerCase());
+                    } else {
+                        // Keyword match (split into words)
+                        const words = term.text.toLowerCase().split(' ');
+                        return words.every(word => post.content.includes(word));
+                    }
+                });
+            });
+
+            // Display results
+            filteredPosts.forEach(post => {
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'result';
+                resultDiv.innerHTML = `
+                    <h2>${post.title}</h2>
+                    <a href="post/${post.file}" target="_blank">Read full post</a>
+                `;
+                resultsDiv.appendChild(resultDiv);
+            });
+
+            if (filteredPosts.length === 0) {
+                resultsDiv.innerHTML = '<p>No results found</p>';
+            }
+        }
+
+        // Event listener for search bar
+        document.getElementById('searchBar').addEventListener('input', (e) => {
+            searchPosts(e.target.value);
+        });
+
+        // Log when data is loaded
+        console.log(`Loaded ${posts.length} posts from posts_data.js`);
+    </script>
+</body>
+</html>
