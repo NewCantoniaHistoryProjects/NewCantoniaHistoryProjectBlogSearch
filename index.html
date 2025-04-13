@@ -3,19 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Medium Posts Search</title>
+    <title>Blogger Posts Search</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
+            display: flex;
+        }
+        #sidebar {
+            width: 250px;
+            margin-right: 20px;
+        }
+        #content {
+            flex: 1;
         }
         #searchBar {
             width: 100%;
             padding: 10px;
             font-size: 16px;
+            margin-bottom: 10px;
+        }
+        #sortButton {
+            padding: 10px;
+            font-size: 16px;
             margin-bottom: 20px;
+        }
+        .filter-label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+        select {
+            width: 100%;
+            padding: 8px;
+            font-size: 14px;
+            margin-bottom: 15px;
         }
         .result {
             margin-bottom: 20px;
@@ -33,95 +57,319 @@
         .result a:hover {
             text-decoration: underline;
         }
+        .highlight {
+            background-color: yellow;
+            font-weight: bold;
+        }
+        .context {
+            margin-top: 10px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
-    <h1>Search My Medium Posts</h1>
-    <input type="text" id="searchBar" placeholder="Search posts (use quotes for exact match)">
-    <div id="results"></div>
+    <div id="sidebar">
+        <h2>Filters</h2>
+        <label for="startYear" class="filter-label">Start Year</label>
+        <select id="startYear"></select>
+        <label for="endYear" class="filter-label">End Year</label>
+        <select id="endYear"></select>
+    </div>
+    <div id="content">
+        <h1>Search My Blogger Posts</h1>
+        <input type="text" id="searchBar" placeholder="Search posts (use quotes for exact match)">
+        <button id="sortButton">Sort Descending</button>
+        <div id="results"></div>
+    </div>
 
-    <!-- Load the generated posts data -->
-    <script src="posts_data.js"></script>
-    
+    <!-- Load scripts in order -->
+    <script src="blogger_export.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/opencc-js.min.js" integrity="sha256-/xfGnx8NhN3z0T/2tO0ZBg5KyA3Dh3F0rXNg0z0vJ8I=" crossorigin="anonymous"></script>
     <script>
-        // Use the postsData from posts_data.js
-        const posts = postsData.map(post => ({
-            title: post.title,
-            file: post.file,
-            content: post.content.toLowerCase()
-        }));
+        // Check if OpenCC is loaded and initialize converters
+        let toSimplified, toTraditional;
+        if (typeof OpenCC !== 'undefined') {
+            toSimplified = OpenCC.Converter({ from: 't', to: 's' });
+            toTraditional = OpenCC.Converter({ from: 's', to: 't' });
+            console.log('OpenCC loaded successfully');
+        } else {
+            console.error('OpenCC failed to load. Simplified/Traditional Chinese conversion will not work.');
+            toSimplified = text => text;
+            toTraditional = text => text;
+        }
 
-        // Search function
-        function searchPosts(query) {
+        // Extract year and month from title
+        function extractDate(title) {
+            const datePatterns = [
+                /\b(\d{4})\.(\d{1,2})\b/,
+                /\b(\d{4})-(\d{4})\b/,
+                /\b(\d{4})\b(?!\.\d|-)/
+            ];
+            
+            for (const pattern of datePatterns) {
+                const match = title.match(pattern);
+                if (match) {
+                    if (pattern.source.includes('-')) {
+                        return { year: parseInt(match[1], 10), month: 1 };
+                    } else if (pattern.source.includes('.')) {
+                        let month = parseInt(match[2], 10);
+                        if (month < 1 || month > 12) month = 1;
+                        return { year: parseInt(match[1], 10), month: month };
+                    } else {
+                        return { year: parseInt(match[1], 10), month: 1 };
+                    }
+                }
+            }
+            return { year: null, month: null };
+        }
+
+        // Prepare posts data with year, month, and titleLower
+        const posts = postsData.map(post => {
+            const date = extractDate(post.title);
+            return {
+                title: post.title,
+                titleLower: (post.title || '').toLowerCase(),
+                link: post.link,
+                content: post.content || '',
+                contentLower: (post.content || '').toLowerCase(),
+                year: date.year,
+                month: date.month
+            };
+        });
+
+        // Get unique years for dropdowns
+        const years = [...new Set(posts.map(post => post.year).filter(year => year !== null))].sort((a, b) => a - b);
+        const minYear = years.length > 0 ? years[0] : null;
+        const maxYear = years.length > 0 ? years[years.length - 1] : null;
+
+        // Populate year dropdowns
+        const startYearSelect = document.getElementById('startYear');
+        const endYearSelect = document.getElementById('endYear');
+
+        if (minYear && maxYear) {
+            const anyOptionStart = document.createElement('option');
+            anyOptionStart.value = '';
+            anyOptionStart.text = 'Any';
+            startYearSelect.appendChild(anyOptionStart);
+
+            const anyOptionEnd = document.createElement('option');
+            anyOptionEnd.value = '';
+            anyOptionEnd.text = 'Any';
+            endYearSelect.appendChild(anyOptionEnd);
+
+            for (let year = minYear; year <= maxYear; year++) {
+                const optionStart = document.createElement('option');
+                optionStart.value = year;
+                optionStart.text = year;
+                startYearSelect.appendChild(optionStart);
+
+                const optionEnd = document.createElement('option');
+                optionEnd.value = year;
+                optionEnd.text = year;
+                endYearSelect.appendChild(optionEnd);
+            }
+
+            startYearSelect.value = '';
+            endYearSelect.value = '';
+        } else {
+            startYearSelect.disabled = true;
+            endYearSelect.disabled = true;
+            startYearSelect.innerHTML = '<option>No years available</option>';
+            endYearSelect.innerHTML = '<option>No years available</option>';
+        }
+
+        let sortAscending = false;
+
+        // Function to get context around matched text
+        function getContext(text, term, contextLength = 50) {
+            const lowerText = text.toLowerCase();
+            const index = lowerText.indexOf(term.toLowerCase());
+            if (index === -1) return '';
+
+            const start = Math.max(0, index - contextLength);
+            const end = Math.min(text.length, index + term.length + contextLength);
+            
+            let before = text.slice(start, index);
+            const matchedText = text.slice(index, index + term.length);
+            let after = text.slice(index + term.length, end);
+
+            if (start > 0) before = '...' + before;
+            if (end < text.length) after += '...';
+
+            return `${before}<span class="highlight">${matchedText}</span>${after}`;
+        }
+
+        // Search and sort function
+        function searchAndSortPosts(query) {
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '';
 
-            if (!query.trim()) return;
+            let filteredPosts = [...posts];
+            let terms = [];
 
-            // Parse query into terms (split by spaces, handle quotes)
-            const terms = [];
-            let currentTerm = '';
-            let inQuotes = false;
-            
-            for (const char of query) {
-                if (char === '"' && !inQuotes) {
-                    inQuotes = true;
-                } else if (char === '"' && inQuotes) {
-                    inQuotes = false;
-                    if (currentTerm) {
-                        terms.push({ text: currentTerm, exact: true });
-                        currentTerm = '';
-                    }
-                } else if (char === ' ' && !inQuotes) {
-                    if (currentTerm) {
-                        terms.push({ text: currentTerm, exact: false });
-                        currentTerm = '';
-                    }
-                } else {
-                    currentTerm += char;
-                }
-            }
-            if (currentTerm) {
-                terms.push({ text: currentTerm, exact: inQuotes });
+            // Apply year filters (only if specified)
+            const startYear = startYearSelect.value ? parseInt(startYearSelect.value) : null;
+            const endYear = endYearSelect.value ? parseInt(endYearSelect.value) : null;
+
+            if (startYear || endYear) {
+                filteredPosts = filteredPosts.filter(post => {
+                    // Include posts with no year (year: null) in any date range
+                    if (!post.year) return true;
+                    if (startYear && post.year < startYear) return false;
+                    if (endYear && post.year > endYear) return false;
+                    return true;
+                });
             }
 
-            // Filter posts
-            const filteredPosts = posts.filter(post => {
-                return terms.every(term => {
-                    if (term.exact) {
-                        // Exact match
-                        return post.content.includes(term.text.toLowerCase());
+            // Apply search filter with SC/TC conversion
+            if (query.trim()) {
+                let currentTerm = '';
+                let inQuotes = false;
+
+                query.split('').forEach(char => {
+                    if (char === '"' && !inQuotes) {
+                        inQuotes = true;
+                    } else if (char === '"' && inQuotes) {
+                        inQuotes = false;
+                        if (currentTerm) {
+                            terms.push({ text: currentTerm, exact: true });
+                            currentTerm = '';
+                        }
+                    } else if (char === ' ' && !inQuotes) {
+                        if (currentTerm) {
+                            terms.push({ text: currentTerm, exact: false });
+                            currentTerm = '';
+                        }
                     } else {
-                        // Keyword match (split into words)
-                        const words = term.text.toLowerCase().split(' ');
-                        return words.every(word => post.content.includes(word));
+                        currentTerm += char;
                     }
                 });
+                if (currentTerm) {
+                    terms.push({ text: currentTerm, exact: inQuotes });
+                }
+
+                console.log('Original terms:', terms);
+
+                // Convert terms to both SC and TC
+                const allTerms = [];
+                terms.forEach(term => {
+                    const simplified = toSimplified(term.text);
+                    const traditional = toTraditional(term.text);
+                    allTerms.push({ text: simplified, exact: term.exact });
+                    if (simplified !== traditional) {
+                        allTerms.push({ text: traditional, exact: term.exact });
+                    }
+                });
+
+                console.log('All terms (SC + TC):', allTerms);
+
+                filteredPosts = filteredPosts.filter(post => {
+                    const contentLower = post.contentLower;
+                    const titleLower = post.titleLower;
+                    return allTerms.every(term => {
+                        if (term.exact) {
+                            console.log(`Checking exact match: "${term.text}" in title "${titleLower.slice(0, 50)}..." or content "${contentLower.slice(0, 50)}..."`);
+                            return titleLower.includes(term.text.toLowerCase()) || 
+                                   contentLower.includes(term.text.toLowerCase());
+                        } else {
+                            const words = term.text.toLowerCase().split(' ').filter(word => word);
+                            console.log(`Checking words: ${words} in title "${titleLower.slice(0, 50)}..." or content "${contentLower.slice(0, 50)}..."`);
+                            return words.every(word => 
+                                titleLower.includes(word) || contentLower.includes(word)
+                            );
+                        }
+                    });
+                });
+
+                console.log('Filtered posts count:', filteredPosts.length);
+            }
+
+            // Sort by year and month
+            filteredPosts.sort((a, b) => {
+                const yearA = a.year !== null ? a.year : Infinity;
+                const yearB = b.year !== null ? b.year : Infinity;
+                const monthA = a.month !== null ? a.month : 1;
+                const monthB = b.month !== null ? b.month : 1;
+
+                if (yearA !== yearB) {
+                    return sortAscending ? yearA - yearB : yearB - yearA;
+                }
+                return sortAscending ? monthA - monthB : monthB - monthA;
             });
 
             // Display results
             filteredPosts.forEach(post => {
                 const resultDiv = document.createElement('div');
                 resultDiv.className = 'result';
+                let contextHtml = '';
+
+                if (query.trim() && terms.length > 0) {
+                    terms.forEach(term => {
+                        const simplified = toSimplified(term.text);
+                        const traditional = toTraditional(term.text);
+                        [simplified, traditional].forEach(text => {
+                            // Check title for context
+                            const titleContext = getContext(post.title, text);
+                            if (titleContext) {
+                                contextHtml += `<div class="context">Title: ${titleContext}</div>`;
+                            }
+                            // Check content for context
+                            const contentContext = getContext(post.content, text);
+                            if (contentContext) {
+                                contextHtml += `<div class="context">Content: ${contentContext}</div>`;
+                            }
+                        });
+                    });
+                }
+
                 resultDiv.innerHTML = `
                     <h2>${post.title}</h2>
-                    <a href="posts/${post.file}" target="_blank">Read full post</a>
+                    <a href="${post.link}" target="_blank">Read full post</a>
+                    ${contextHtml}
                 `;
                 resultsDiv.appendChild(resultDiv);
             });
 
-            if (filteredPosts.length === 0) {
+            if (filteredPosts.length === 0 && (query.trim() || startYear || endYear)) {
                 resultsDiv.innerHTML = '<p>No results found</p>';
             }
         }
 
         // Event listener for search bar
         document.getElementById('searchBar').addEventListener('input', (e) => {
-            searchPosts(e.target.value);
+            searchAndSortPosts(e.target.value);
         });
 
-        // Log when data is loaded
-        console.log(`Loaded ${posts.length} posts from posts_data.js`);
+        // Event listener for sort button
+        document.getElementById('sortButton').addEventListener('click', () => {
+            sortAscending = !sortAscending;
+            document.getElementById('sortButton').textContent = 
+                sortAscending ? 'Sort Ascending' : 'Sort Descending';
+            searchAndSortPosts(document.getElementById('searchBar').value);
+        });
+
+        // Event listeners for year filters
+        startYearSelect.addEventListener('change', () => {
+            if (endYearSelect.value && startYearSelect.value && 
+                parseInt(endYearSelect.value) < parseInt(startYearSelect.value)) {
+                endYearSelect.value = startYearSelect.value;
+            }
+            searchAndSortPosts(document.getElementById('searchBar').value);
+        });
+
+        endYearSelect.addEventListener('change', () => {
+            if (startYearSelect.value && endYearSelect.value && 
+                parseInt(startYearSelect.value) > parseInt(endYearSelect.value)) {
+                startYearSelect.value = endYearSelect.value;
+            }
+            searchAndSortPosts(document.getElementById('searchBar').value);
+        });
+
+        // Initial display of all posts
+        searchAndSortPosts('');
+
+        console.log(`Loaded ${posts.length} posts from blogger_export.js`);
+        console.log('Available years:', years);
     </script>
 </body>
 </html>
