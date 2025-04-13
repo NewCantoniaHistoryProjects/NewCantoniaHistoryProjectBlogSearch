@@ -84,13 +84,13 @@
 
     <!-- Load scripts in order -->
     <script src="blogger_export.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/opencc-js.min.js" integrity="sha256-/xfGnx8NhN3z0T/2tO0ZBg5KyA3Dh3F0rXNg0z0vJ8I=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.min.js"></script>
     <script>
         // Check if OpenCC is loaded and initialize converters
         let toSimplified, toTraditional;
         if (typeof OpenCC !== 'undefined') {
-            toSimplified = OpenCC.Converter({ from: 't', to: 's' });
-            toTraditional = OpenCC.Converter({ from: 's', to: 't' });
+            toSimplified = OpenCC.Converter({ from: 'hk', to: 'cn' });
+            toTraditional = OpenCC.Converter({ from: 'cn', to: 'hk' });
             console.log('OpenCC loaded successfully');
         } else {
             console.error('OpenCC failed to load. Simplified/Traditional Chinese conversion will not work.');
@@ -182,6 +182,7 @@
 
         // Function to get context around matched text
         function getContext(text, term, contextLength = 50) {
+            console.log(text);
             const lowerText = text.toLowerCase();
             const index = lowerText.indexOf(term.toLowerCase());
             if (index === -1) return '';
@@ -250,30 +251,15 @@
 
                 console.log('Original terms:', terms);
 
-                // Convert terms to both SC and TC
-                const allTerms = [];
-                terms.forEach(term => {
-                    const simplified = toSimplified(term.text);
-                    const traditional = toTraditional(term.text);
-                    allTerms.push({ text: simplified, exact: term.exact });
-                    if (simplified !== traditional) {
-                        allTerms.push({ text: traditional, exact: term.exact });
-                    }
-                });
-
-                console.log('All terms (SC + TC):', allTerms);
-
                 filteredPosts = filteredPosts.filter(post => {
                     const contentLower = post.contentLower;
                     const titleLower = post.titleLower;
-                    return allTerms.every(term => {
+                    return terms.every(term => {
                         if (term.exact) {
-                            console.log(`Checking exact match: "${term.text}" in title "${titleLower.slice(0, 50)}..." or content "${contentLower.slice(0, 50)}..."`);
                             return titleLower.includes(term.text.toLowerCase()) || 
                                    contentLower.includes(term.text.toLowerCase());
                         } else {
                             const words = term.text.toLowerCase().split(' ').filter(word => word);
-                            console.log(`Checking words: ${words} in title "${titleLower.slice(0, 50)}..." or content "${contentLower.slice(0, 50)}..."`);
                             return words.every(word => 
                                 titleLower.includes(word) || contentLower.includes(word)
                             );
