@@ -136,7 +136,7 @@ def main():
     output_file = 'blogger_export.js'
     
     # Get Blogger posts
-    blogger_posts = [] # parse_blogger_xml(xml_file)
+    blogger_posts = parse_blogger_xml(xml_file)
     
     # Get Medium posts
     medium_posts = parse_medium_html(input_folder)
